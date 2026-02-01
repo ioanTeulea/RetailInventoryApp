@@ -1,20 +1,33 @@
 package com.example.retailinventoryapp.viewmodel
 
-
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.retailinventoryapp.data.exception.ApiException
+import com.example.retailinventoryapp.data.repository.ManagerDashboardData
+import com.example.retailinventoryapp.data.repository.ProductRepository
+import com.example.retailinventoryapp.data.repository.SaleRepository
+import com.example.retailinventoryapp.data.repository.StockAlertUiModel // Import din Repository
+import com.example.retailinventoryapp.data.repository.TeamMemberUiModel // Import din Repository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import javax.inject.Inject
-import java.time.LocalDateTime
+import kotlin.math.min
 
-// ========== DATA CLASSES ==========
+private const val TAG = "ManagerVM"
+
+// ========== UI STATE ==========
 
 data class ManagerUiState(
-    val storeName: String = "Store 1",
+    val storeName: String = "",
     val todayRevenue: Int = 0,
     val totalTransactions: Int = 0,
     val lowStockAlerts: List<StockAlertUiModel> = emptyList(),
@@ -22,66 +35,145 @@ data class ManagerUiState(
     val lowStockCount: Int = 0,
     val outOfStockCount: Int = 0,
     val teamPerformance: List<TeamMemberUiModel> = emptyList(),
-    val isLoading: Boolean = false
-)
-
-data class StockAlertUiModel(
-    val id: Long,
-    val productName: String,
-    val currentStock: Int,
-    val threshold: Int
-)
-
-data class TeamMemberUiModel(
-    val id: Long,
-    val name: String,
-    val sales: Int,
-    val rating: Double
+    val isLoading: Boolean = false,
+    val isSyncing: Boolean = false,
+    val error: String? = null,
+    val message: String? = null,
+    val lastSyncTime: Long = 0L
 )
 
 // ========== VIEWMODEL ==========
 
 @HiltViewModel
 class ManagerViewModel @Inject constructor(
-    // private val saleRepository: SaleRepository,    // ❌ Dezactivat temporar
-    // private val productRepository: ProductRepository,
-    // private val userRepository: UserRepository
+    private val saleRepository: SaleRepository,
+    private val productRepository: ProductRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ManagerUiState())
     val uiState: StateFlow<ManagerUiState> = _uiState.asStateFlow()
 
+    private var loadJob: Job? = null
+
     init {
-        generateMockDashboardData()
+        loadDashboardData()
     }
 
     /**
-     * Generează date fictive pentru a testa UI-ul de Manager
+     * Load dashboard data - Offline-First Strategy
      */
-    private fun generateMockDashboardData() {
-        _uiState.value = ManagerUiState(
-            storeName = "Magazin Centru",
-            todayRevenue = 15400,
-            totalTransactions = 142,
-            totalProducts = 1250,
-            lowStockCount = 5,
-            outOfStockCount = 2,
-            lowStockAlerts = listOf(
-                StockAlertUiModel(1, "Apă Minerală 2L", 8, 20),
-                StockAlertUiModel(2, "Pâine Secară", 3, 15),
-                StockAlertUiModel(3, "Ciocolată cu Lapte", 12, 25)
-            ),
-            teamPerformance = listOf(
-                TeamMemberUiModel(101, "Ion Ionescu", 4500, 4.8),
-                TeamMemberUiModel(102, "Elena Popa", 3900, 4.9),
-                TeamMemberUiModel(103, "Marius Dan", 3100, 4.2)
-            ),
-            isLoading = false
-        )
+    fun loadDashboardData() {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, error = null) }
+
+            // 1. Stratul Local (Instant)
+            val cachedData = saleRepository.getManagerDashboardLocal()
+            if (cachedData != null) {
+                updateManagerUI(cachedData)
+                _uiState.update { it.copy(isLoading = false) }
+            }
+
+            // 2. Stratul de Network (Background Sync)
+            performBackgroundSync()
+        }
     }
 
-    // Funcții goale pentru a nu da erori în restul codului
-    fun loadDashboardData() { generateMockDashboardData() }
-    fun refreshData() { generateMockDashboardData() }
-    fun processRefund(saleId: Long, reason: String) { /* Mock action */ }
+    /**
+     * Background sync with Exponential Backoff (The Golden Standard)
+     */
+    private suspend fun performBackgroundSync() {
+        var currentDelay = 100L
+        val maxRetries = 3
+
+        repeat(maxRetries) { attempt ->
+            try {
+                _uiState.update { it.copy(isSyncing = true) }
+
+                Log.d(TAG, "Sync attempt ${attempt + 1}")
+
+                // Fetch fresh data
+                val dashboardData = saleRepository.fetchManagerDashboardFromServer()
+                val lowStockAlerts = productRepository.fetchLowStockAlertsFromServer()
+                val teamPerformance = saleRepository.fetchTeamPerformanceFromServer()
+
+                // Persist to local cache
+                saleRepository.saveManagerDashboardLocal(dashboardData)
+                productRepository.saveLowStockAlertsLocal(lowStockAlerts)
+                saleRepository.saveTeamPerformanceLocal(teamPerformance)
+
+                // Update UI - asamblează datele proaspete
+                updateManagerUI(
+                    dashboardData.copy(
+                        lowStockAlerts = lowStockAlerts,
+                        teamPerformance = teamPerformance
+                    )
+                )
+
+                _uiState.update { state ->
+                    state.copy(
+                        isSyncing = false,
+                        message = "✅ Dashboard actualizat",
+                        lastSyncTime = System.currentTimeMillis()
+                    )
+                }
+                return // Ieșim din funcție la succes
+            } catch (e: Exception) {
+                if (attempt == maxRetries - 1) {
+                    handleError(e)
+                } else {
+                    delay(currentDelay)
+                    currentDelay = min(currentDelay * 2, 2000L)
+                }
+            }
+        }
+        _uiState.update { it.copy(isSyncing = false) }
+    }
+
+    private fun updateManagerUI(data: ManagerDashboardData) {
+        _uiState.update { state ->
+            state.copy(
+                storeName = data.storeName,
+                todayRevenue = data.todayRevenue,
+                totalTransactions = data.totalTransactions,
+                lowStockAlerts = data.lowStockAlerts,
+                totalProducts = data.totalProducts,
+                lowStockCount = data.lowStockCount,
+                outOfStockCount = data.outOfStockCount,
+                teamPerformance = data.teamPerformance,
+                isLoading = false
+            )
+        }
+    }
+
+    fun processRefund(saleId: Long, reason: String) {
+        viewModelScope.launch {
+            try {
+                _uiState.update { it.copy(isSyncing = true) }
+                saleRepository.refundSale(saleId, reason)
+                _uiState.update { it.copy(message = "✅ Refund procesat", isSyncing = false) }
+                loadDashboardData()
+            } catch (e: Exception) {
+                handleError(e)
+            }
+        }
+    }
+
+    private fun handleError(e: Exception) {
+        val msg = when (e) {
+            is ApiException -> "❌ Server Error: ${e.code}"
+            is SocketTimeoutException -> "❌ Timeout: Serverul nu răspunde"
+            is UnknownHostException -> "❌ Fără internet"
+            else -> "❌ Eroare: ${e.message}"
+        }
+        _uiState.update { it.copy(error = msg, isLoading = false, isSyncing = false) }
+    }
+
+    fun clearError() = _uiState.update { it.copy(error = null) }
+    fun clearMessage() = _uiState.update { it.copy(message = null) }
+
+    override fun onCleared() {
+        loadJob?.cancel()
+        super.onCleared()
+    }
 }

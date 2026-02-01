@@ -1,6 +1,5 @@
 package com.example.retailinventoryapp.ui.screens.boss
 
-
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,22 +15,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.retailinventoryapp.data.repository.EmployeeUiModel
+import com.example.retailinventoryapp.data.repository.StorePerformanceUiModel
 import com.example.retailinventoryapp.ui.theme.RetailColors
 import com.example.retailinventoryapp.viewmodel.BossUiState
 import com.example.retailinventoryapp.viewmodel.BossViewModel
-import com.example.retailinventoryapp.viewmodel.EmployeeUiModel
-import com.example.retailinventoryapp.viewmodel.StorePerformanceUiModel
 
 @Composable
 fun BossDashboardScreen(
     viewModel: BossViewModel = hiltViewModel(),
-    onNavigateToStoreDetail: (storeId: Long) -> Unit
+    onNavigateToStoreDetail: (storeId: Long) -> Unit,
+    onNavigateToFinancial: () -> Unit  // ✅ Already have this!
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
     Scaffold(
         topBar = {
-            BossTopBar()
+            BossTopBar(onNavigateToFinancial = onNavigateToFinancial)  // ✅ Pass callback
         }
     ) { paddingValues ->
         LazyColumn(
@@ -61,7 +61,10 @@ fun BossDashboardScreen(
 
             // Financial Summary
             item {
-                FinancialSummarySection(uiState)
+                FinancialSummarySection(
+                    uiState = uiState,
+                    onNavigateToFinancial = onNavigateToFinancial  // ✅ Pass callback
+                )
                 Spacer(modifier = Modifier.height(24.dp))
             }
 
@@ -74,8 +77,9 @@ fun BossDashboardScreen(
     }
 }
 
+// ✅ UPDATED: Add Financial Button to TopBar
 @Composable
-fun BossTopBar() {
+fun BossTopBar(onNavigateToFinancial: () -> Unit) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -83,23 +87,58 @@ fun BossTopBar() {
         color = RetailColors.Primary,
         shadowElevation = 4.dp
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.Center
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                text = "Network Overview",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-            Text(
-                text = "3 Magazine Active",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.8f)
-            )
+            // Left: Header Info
+            Column {
+                Text(
+                    text = "Network Overview",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Text(
+                    text = "3 Magazine Active",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.8f)
+                )
+            }
+
+            // Right: Financial Button ✅
+            Button(
+                onClick = { onNavigateToFinancial() },
+                modifier = Modifier
+                    .height(40.dp)
+                    .width(130.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.White.copy(alpha = 0.2f)
+                ),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.5f))
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Analytics,
+                        contentDescription = "Financial",
+                        modifier = Modifier.size(16.dp),
+                        tint = Color.White
+                    )
+                    Text(
+                        "Financiar",
+                        fontSize = 12.sp,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
         }
     }
 }
@@ -119,7 +158,6 @@ fun NetworkOverviewSection(uiState: BossUiState) {
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Grid 2x2
         Column(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -265,15 +303,14 @@ fun StoreRankingCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Rank Badge
             Surface(
                 modifier = Modifier
                     .size(40.dp),
                 shape = RoundedCornerShape(8.dp),
                 color = when (rank) {
-                    1 -> Color(0xFFFFD700)  // Gold
-                    2 -> Color(0xFFC0C0C0)  // Silver
-                    3 -> Color(0xFFCD7F32)  // Bronze
+                    1 -> Color(0xFFFFD700)
+                    2 -> Color(0xFFC0C0C0)
+                    3 -> Color(0xFFCD7F32)
                     else -> RetailColors.Primary
                 }
             ) {
@@ -290,7 +327,6 @@ fun StoreRankingCard(
                 }
             }
 
-            // Store Info
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = store.storeName,
@@ -304,7 +340,6 @@ fun StoreRankingCard(
                 )
             }
 
-            // Trend
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -320,18 +355,32 @@ fun StoreRankingCard(
     }
 }
 
+// ✅ UPDATED: Add Navigation Button to Financial Section
 @Composable
-fun FinancialSummarySection(uiState: BossUiState) {
+fun FinancialSummarySection(
+    uiState: BossUiState,
+    onNavigateToFinancial: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
     ) {
-        Text(
-            text = "Analiză Financiară",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "Analiză Financiară",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            TextButton(onClick = { onNavigateToFinancial() }) {
+                Text("Detalii", fontSize = 12.sp)
+            }
+        }
 
         Spacer(modifier = Modifier.height(12.dp))
 

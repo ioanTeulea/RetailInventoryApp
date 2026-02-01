@@ -18,20 +18,24 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.retailinventoryapp.ui.theme.RetailColors
 import com.example.retailinventoryapp.viewmodel.ManagerUiState
 import com.example.retailinventoryapp.viewmodel.ManagerViewModel
-import com.example.retailinventoryapp.viewmodel.StockAlertUiModel
-import com.example.retailinventoryapp.viewmodel.TeamMemberUiModel
 import androidx.compose.ui.text.style.TextAlign
+import com.example.retailinventoryapp.data.repository.StockAlertUiModel
+import com.example.retailinventoryapp.data.repository.TeamMemberUiModel
 
 @Composable
 fun ManagerDashboardScreen(
     viewModel: ManagerViewModel = hiltViewModel(),
-    onNavigateToInventory: () -> Unit
+    onNavigateToInventory: () -> Unit,
+    onNavigateToReports: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
     Scaffold(
         topBar = {
-            ManagerTopBar(storeName = "Store 1")
+            ManagerTopBar(
+                storeName = "Store 1",
+                onNavigateToReports = onNavigateToReports
+            )
         }
     ) { paddingValues ->
         LazyColumn(
@@ -74,8 +78,12 @@ fun ManagerDashboardScreen(
     }
 }
 
+// ✅ UPDATED: Add Reports Button to TopBar
 @Composable
-fun ManagerTopBar(storeName: String) {
+fun ManagerTopBar(
+    storeName: String,
+    onNavigateToReports: () -> Unit
+) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -83,22 +91,56 @@ fun ManagerTopBar(storeName: String) {
         color = RetailColors.Surface,
         shadowElevation = 2.dp
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                text = "Manager",
-                style = MaterialTheme.typography.bodyMedium,
-                color = RetailColors.OnSurfaceLight
-            )
-            Text(
-                text = storeName,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
+            // Left: Store Info
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Manager",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = RetailColors.OnSurfaceLight
+                )
+                Text(
+                    text = storeName,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // Right: Reports Button ✅
+            Button(
+                onClick = { onNavigateToReports() },
+                modifier = Modifier
+                    .height(40.dp)
+                    .width(100.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = RetailColors.Primary
+                ),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        Icons.Default.BarChart,
+                        contentDescription = "Reports",
+                        modifier = Modifier.size(16.dp),
+                        tint = Color.White
+                    )
+                    Text(
+                        "Rapoarte",
+                        fontSize = 12.sp,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
         }
     }
 }

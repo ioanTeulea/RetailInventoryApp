@@ -26,14 +26,14 @@ import com.example.retailinventoryapp.viewmodel.SaleUiModel
 
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ShoppingCart
-
+import com.example.retailinventoryapp.ui.navigation.Destinations
 
 
 @Composable
 fun CasierDashboardScreen(
     viewModel: CasierViewModel = hiltViewModel(),
-    onNavigateToScan: () -> Unit,
-    onNavigateToProfile: () -> Unit
+    onNavigate: (String) -> Unit, // ✅ Navigare unificată
+    onNavigateToProfile: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -46,13 +46,11 @@ fun CasierDashboardScreen(
         },
         bottomBar = {
             CasierBottomBar(
-                onScanClick = onNavigateToScan,
-                onCartClick = { /* Navigate to cart */ },
-                onHistoryClick = { /* Show history */ }
+                currentRoute = Destinations.CasierDashboard.route,
+                onNavigate = onNavigate
             )
         }
     ) { paddingValues ->
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -60,28 +58,17 @@ fun CasierDashboardScreen(
                 .background(RetailColors.Background)
                 .verticalScroll(rememberScrollState())
         ) {
-
-            // Quick Stats
             QuickStatsSection(uiState)
-
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Action Buttons
             ActionButtonsSection(
-                onScanClick = onNavigateToScan,
-                onCheckoutClick = { /* Navigate */ }
+                onScanClick = { onNavigate(Destinations.CasierScan.route) }
             )
 
             Spacer(modifier = Modifier.height(24.dp))
-
-            // Today's Sales
             TodaysSalesSection(uiState)
-
             Spacer(modifier = Modifier.height(24.dp))
-
-            // Quick Access
             QuickAccessSection()
-
             Spacer(modifier = Modifier.height(32.dp))
         }
     }
@@ -132,9 +119,8 @@ fun CasierTopBar(
 
 @Composable
 fun CasierBottomBar(
-    onScanClick: () -> Unit,
-    onCartClick: () -> Unit,
-    onHistoryClick: () -> Unit
+    currentRoute: String, // Ruta activă (ex: "casier_dashboard")
+    onNavigate: (String) -> Unit // Funcție unică de navigare
 ) {
     NavigationBar(
         modifier = Modifier
@@ -143,51 +129,45 @@ fun CasierBottomBar(
         containerColor = RetailColors.Surface,
         contentColor = RetailColors.Primary
     ) {
+        // --- DASHBOARD / HOME ---
         NavigationBarItem(
-            icon = {
-                Icon(
-                    Icons.Default.QrCode2,
-                    contentDescription = "Scan",
-                    modifier = Modifier.size(24.dp)
-                )
-            },
-            label = { Text("Scan", fontSize = 11.sp) },
-            selected = true,
-            onClick = onScanClick,
+            selected = currentRoute == Destinations.CasierDashboard.route,
+            onClick = { onNavigate(Destinations.CasierDashboard.route) },
+            icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
+            label = { Text("Dashboard", fontSize = 11.sp) },
             colors = NavigationBarItemDefaults.colors(
                 selectedIconColor = RetailColors.Primary,
                 selectedTextColor = RetailColors.Primary,
+                unselectedIconColor = RetailColors.OnSurfaceLight,
                 indicatorColor = RetailColors.Primary.copy(alpha = 0.1f)
             )
         )
 
+        // --- CART / SCAN ---
         NavigationBarItem(
-            icon = {
-                Icon(
-                    Icons.Default.ShoppingCart,
-                    contentDescription = "Cart"
-                )
-            },
+            selected = currentRoute == Destinations.CasierScan.route,
+            onClick = { onNavigate(Destinations.CasierScan.route) },
+            icon = { Icon(Icons.Default.ShoppingCart, contentDescription = "Cart") },
             label = { Text("Coș", fontSize = 11.sp) },
-            selected = false,
-            onClick = onCartClick,
             colors = NavigationBarItemDefaults.colors(
-                unselectedIconColor = RetailColors.OnSurfaceLight
+                selectedIconColor = RetailColors.Primary,
+                selectedTextColor = RetailColors.Primary,
+                unselectedIconColor = RetailColors.OnSurfaceLight,
+                indicatorColor = RetailColors.Primary.copy(alpha = 0.1f)
             )
         )
 
+        // --- HISTORY ---
         NavigationBarItem(
-            icon = {
-                Icon(
-                    Icons.Default.History,
-                    contentDescription = "History"
-                )
-            },
+            selected = currentRoute == Destinations.CasierScan.route,
+            onClick = { onNavigate(Destinations.CasierScan.route) },
+            icon = { Icon(Icons.Default.History, contentDescription = "Istoric") },
             label = { Text("Istoric", fontSize = 11.sp) },
-            selected = false,
-            onClick = onHistoryClick,
             colors = NavigationBarItemDefaults.colors(
-                unselectedIconColor = RetailColors.OnSurfaceLight
+                selectedIconColor = RetailColors.Primary,
+                selectedTextColor = RetailColors.Primary,
+                unselectedIconColor = RetailColors.OnSurfaceLight,
+                indicatorColor = RetailColors.Primary.copy(alpha = 0.1f)
             )
         )
     }
@@ -288,7 +268,6 @@ fun StatCard(
 @Composable
 fun ActionButtonsSection(
     onScanClick: () -> Unit,
-    onCheckoutClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -302,12 +281,6 @@ fun ActionButtonsSection(
             PrimaryButton(
                 text = "🔍 SCAN",
                 onClick = onScanClick,
-                modifier = Modifier.weight(1f)
-            )
-
-            SecondaryButton(
-                text = "💳 CHECKOUT",
-                onClick = onCheckoutClick,
                 modifier = Modifier.weight(1f)
             )
         }
